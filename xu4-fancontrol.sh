@@ -6,30 +6,28 @@ FAN_CHANGED="*"
 
 get_disk_dev_info() {
     # Pull disk info from /dev/sd*
-    fdisk -l > disks.txt 2>/dev/null
-    SATA=($(awk '/^\/dev\/sd/ {printf "%s ", $1}' disks.txt))
-    rm disks.txt
+    SATA=$(fdisk -l | awk '/^\/dev\/sd/ {printf "%s ", $1}')
 }
 
 get_disk_temperature() {
     for i in "${!SATA[@]}"
     do
-        # declare and assign variable seperately to avoid masking return value
-        DISK_TEMP[$i]=" (IDLE)"
+        # Declare and assign variable separately to avoid masking return value
+        DISK_TEMP[$i]="0"
         local t
         t=$(smartctl -a "${SATA[$i]}" -d sat | grep "Temp")
         if (( $? == 0 ))
         then
-            local temp=$(echo $t | awk '{print $10}')
+            local temp=$(echo ${t} | awk '{print $10}')
             DISK_TEMP[$i]="$temp"
         else
-            DISK_TEMP[$i]=""
+            DISK_TEMP[$i]="0"
         fi
     done
 }
 
 get_cpu_temperature() {
-    for i in {0..4}
+    for i in 0 1 2 3 4
     do
         _t=$(($(</sys/class/thermal/thermal_zone${i}/temp) / 1000))
         CPU_TEMP[$i]="$_t"
@@ -49,7 +47,7 @@ handle_fan() {
     do
         if (( "${DISK_TEMP[$i]}" > "${DISK_TEMP_THRESHOLD}" ))
         then
-            if [ "${FAN_CHANGED}" != "1" ]
+            if [[ "${FAN_CHANGED}" != "1" ]]
             then
                 echo "Turning fan on because disk $i has hit the threshold"
             fi
@@ -64,7 +62,7 @@ handle_fan() {
     do
         if (( "${CPU_TEMP[$i]}" > "${CPU_TEMP_THRESHOLD}" ))
         then
-            if [ "${FAN_CHANGED}" != "1" ]
+            if [[ "${FAN_CHANGED}" != "1" ]]
             then
                 echo "Turning fan on because CPU $i has hit the threshold"                
             fi
@@ -76,7 +74,7 @@ handle_fan() {
     done
     
     # No fuss, fan is off
-    if [ "${FAN_CHANGED}" != "0" ]
+    if [[ "${FAN_CHANGED}" != "0" ]]
     then
         echo "All temps nominal, turning fan off"
         FAN_CHANGED="0"
@@ -84,11 +82,18 @@ handle_fan() {
     fan_off
 }
 
-while true; do
-    get_disk_dev_info
-    get_disk_temperature
-    get_cpu_temperature
-    handle_fan
-    
-    sleep ${REFRESH}
-done
+# Ensure smartctl is installed
+which smartctl > /dev/null
+if [[ $? -eq 0 ]]; then
+    # Continuous loop
+    while true; do
+        get_disk_dev_info
+        get_disk_temperature
+        get_cpu_temperature
+        handle_fan
+
+        sleep ${REFRESH}
+    done
+else
+    (>&2 echo "smartctl command was not found")
+fi
