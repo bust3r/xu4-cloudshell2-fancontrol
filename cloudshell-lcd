@@ -1,21 +1,25 @@
-#!/bin/bash
+ #!/bin/bash
 # hardkernel CloudShell Screen update
 #
 # requires the following packages:
-# curl sysstat
+# curl sysstat figlet
+# Steve's Mod - display disk usage of /dev/md? devices
+#    -Read a raid status, and display on screen
 #
-# Source http://bazaar.launchpad.net/~kyle1117/+junk/cloudshell-lcd/view/head:/bin/cloudshell-lcd
+#
 
 ############## Configuration
 
-# Disable LCD Sleep mode
+# Disable LCD Slepp mode
 echo -e '\033[9;0]' > /dev/tty1
 
 # console font
 # More fonts on: /usr/share/consolefonts
 export TERM="linux"
-export CONSOLE_FONT="Lat7-Fixed18"
-#export CONSOLE_FONT="Lat15-TerminusBold20x10"
+#export CONSOLE_FONT="Lat7-Fixed13"
+#export CONSOLE_FONT="Lat7-Fixed18"
+export CONSOLE_FONT="Lat15-Terminus12x6"
+#export CONSOLE_FONT="Lat15-Terminus14"
 
 # Output Console (ttyX)
 export OUTPUT_CONSOLE="1"
@@ -69,11 +73,8 @@ get_net_tx_rx_realtime() {
 }
 
 get_disk_mount_info() {
-	fdisk -l > disks.txt
-	SATA=($(awk '/^\/dev\/sd/ {printf "%s ", $1}' disks.txt))
-	rm disks.txt
+	SATA=($(awk '/^\/dev\/[ms]d/ {printf "%s ", $1}' /proc/mounts))
 }
-
 
 get_disk_info() {
 	local t=$(df -h)
@@ -167,9 +168,14 @@ get_process_count() {
 # local variables
 ext_ip_refresh_c=0
 COFF=$(tput sgr0)
+CBRED=$(tput setab 1)
+CBBLACK=$(tput setab 0)
+CBLACK=$(tput setaf 0)
 CGREEN=$(tput setaf 2)
 CRED=$(tput setaf 1)
 CBLUE=$(tput setaf 6)
+CWHITE=$(tput setaf 7)
+
 oc="/dev/tty$OUTPUT_CONSOLE"
 
 # font setup
@@ -207,8 +213,8 @@ while true; do
 	get_cpu_clock
 	get_cpu_usage
 	get_cpu_temperature
-	get_samba_connections
-	get_nfs_connections
+	#get_samba_connections
+	#get_nfs_connections
 	#get_process_count
 
 	# clear the screen every loop
@@ -236,16 +242,38 @@ while true; do
 		echo "" > $oc
 		echo -e "${SATA[$i]} ${DISK_TEMP[$i]}$COFF" > $oc
 		echo -e "R/W $CBLUE${DISK_R[$i]}$COFF / $CBLUE${DISK_W[$i]}$COFF MB/s" > $oc
-		#echo -ne "Disk Used: $CBLUE${DISK_USED[$i]}$COFF ($CBLUE${DISK_USED_PCT[$i]}$COFF)  Free: $CBLUE${DISK_FREE[$i]}$COFF" > $oc
+		echo -ne "Disk Used: $CBLUE${DISK_USED[$i]}$COFF ($CBLUE${DISK_USED_PCT[$i]}$COFF)  Free: $CBLUE${DISK_FREE[$i]}$COFF" > $oc
 	done
 
 	# Line Samba
-	echo -e "Samba Clients: $CBLUE$SAMBA_CONNECTIONS$COFF" > $oc
-	# Line NFS
-	echo -e "NFS Connections: $CBLUE$NFS_CONNECTIONS$COFF" > $oc
-	# Line Processes
+	#echo -e "Samba Clients: $CBLUE$SAMBA_CONNECTIONS$COFF" > $oc
+	# line NFS
+	#echo -e "NFS Connections: $CBLUE$NFS_CONNECTIONS$COFF" > $oc
+	# line Processes
 
+#RAID STATUS
+	if [ -f /var/log/RAID_STATUS4LCD ]; then
+	  RAID_STATUS4LCD=$(cat /var/log/RAID_STATUS4LCD)
+	  echo "" > $oc
+	  echo "" > $oc
+	  if [ "$RAID_STATUS4LCD" = "Normal" ]; then 
+	    echo "Raid Status:${CGREEN}" > $oc
+	    figlet "$RAID_STATUS4LCD" > $oc
+	    echo "${COFF}" > $oc
+	  elif [ "$RAID_STATUS4LCD" = "Rebuilding" ]; then
+	    echo "Raid Status:${CBLUE}" > $oc
+	    figlet "$RAID_STATUS4LCD" > $oc
+	    echo "${COFF}" > $oc
+	  else
+##ALTERNATE PRINT OUT STYLE
+###	    printf "Raid Status:\n${CBRED}!!!!!!!!!!!!!!!!!!!!\n!!${COFF}%*s%*s${CBRED}!!\n!!!!!!!!!!!!!!!!!!!!${COFF}% 20s ${COFF} \r\n${COFF} " $(((${#RAID_STATUS4LCD}+16)/2)) $RAID_STATUS4LCD $(((17-${#RAID_STATUS4LCD})/2)) > $oc
+	    echo "Raid Status:${CBRED}" > $oc
+	    figlet "$RAID_STATUS4LCD" > $oc
+	    echo "${COFF}" > $oc
+	  fi
+	fi
 	# sleep
 	sleep $REFRESH
 
 done
+
